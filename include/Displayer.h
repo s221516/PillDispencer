@@ -4,6 +4,7 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <WebSocketsServer.h>
+#include <SPIFFS.h>
 #include <map>
 #include <queue>
 #include <freertos/FreeRTOS.h>
@@ -25,6 +26,7 @@ public:
     void handleClients();
     void logMessage(const String& msg);
     void setWebSocketEventHandler();
+    void broadcast(const String& message);
     String getCommandBuffer();
     void clearCommandBuffer();
     bool hasCommands();  // Check if there are queued commands
@@ -45,8 +47,11 @@ private:
     static void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length);
     void connectToWiFi();
     void setupWebServer();
-    static const char* getHtmlPage();
+    void initSPIFFS();
+    String getContentType(String filename);
+    bool handleFileRead(String path);
     void handleDeviceConnection(uint8_t clientId);
     void handleDeviceDisconnection(uint8_t clientId);
     void updateDeviceActivity(uint8_t clientId);
+    void updateConnectedDevicesActivity();
 };

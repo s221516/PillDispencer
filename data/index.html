@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>ESP32 Pill Dispenser</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h2>💊 ESP32 Pill Dispenser</h2>
+  <div id="device-info" style="font-size: 0.8em; color: #888; margin-bottom: 10px; text-align: center;">
+    Device ID: <span id="device-id-display">Loading...</span>
+  </div>
+  
+  <div class="container">
+    <div class="terminal-section">
+      <h3>📟 System Log</h3>
+      <div id="log"></div>
+      <input type="text" id="cmd" placeholder="Enter command..." />
+    </div>
+    
+    <div class="dispenser-section">
+      <h3>🏥 Dispensers</h3>
+      <div id="dispensers"></div>
+    </div>
+    
+    <div class="sequence-section">
+      <h3>📋 Saved Sequences</h3>
+      <div id="sequences-container"></div>
+    </div>
+    
+    <div class="sequence-builder">
+      <h3>🔧 Create New Sequence</h3>
+      <form>
+        <div class="sequence-name-input">
+          <label for="sequence-name">Sequence Name:</label>
+          <input type="text" id="sequence-name" placeholder="e.g., morning, evening, bedtime" />
+        </div>
+        
+        <div id="sequence-controls"></div>
+        
+        <div class="sequence-preview">
+          <h4>Preview:</h4>
+          <div id="preview-text">Enter a name to see preview</div>
+        </div>
+        
+        <button type="button" class="create-sequence-btn" onclick="createSequence()">✨ Create Sequence</button>
+      </form>
+    </div>
+    
+    <div class="log-section">
+      <h3>📊 Dispensing Log</h3>
+      <div id="dispensing-log"></div>
+      <button onclick="clearDispensingLog()" class="clear-log-btn">🗑️ Clear Log</button>
+    </div>
+  </div>
+  
+  <script src="app.js"></script>
+</body>
+</html>

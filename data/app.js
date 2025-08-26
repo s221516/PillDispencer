@@ -9,7 +9,7 @@ const sequencesContainer = document.getElementById('sequences-container');
 let deviceId = '';
 let sequences = [];
 let isParsingSequenceList = false;
-let dispenserNames = ['Dispenser 1', 'Dispenser 2', 'Dispenser 3', 'Dispenser 4', 'Dispenser 5', 'Dispenser 6'];
+let dispenserNames = ['Dispenser 1', 'Dispenser 2'];
 let dispensingLog = [];
 
 // Initialize
@@ -52,7 +52,7 @@ function loadDispenserNames() {
 
 function setupDispenserButtons() {
   let html = '';
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 2; i++) {
     html += `<button class="dispenser-btn" data-index="${i}" onpointerdown="startLongPress(event, ${i})" onpointerup="endLongPress(event)" onpointerleave="endLongPress(event)" onpointercancel="endLongPress(event)">${dispenserNames[i]}</button>`;
   }
   dispensersContainer.innerHTML = html;
@@ -224,7 +224,7 @@ function clearDispensingLog() {
 }
 
 // Sequence builder functions
-let sequenceCounts = [0, 0, 0, 0, 0, 0];
+let sequenceCounts = [0, 0];
 
 function adjustCount(index, change) {
   sequenceCounts[index] = Math.max(0, sequenceCounts[index] + change);
@@ -304,7 +304,7 @@ function createSequence() {
 }
 
 function resetBuilder() {
-  sequenceCounts = [0, 0, 0, 0, 0, 0];
+  sequenceCounts = [0, 0];
   document.getElementById('sequence-name').value = '';
   updateBuilderLabels(); // This will refresh the count displays
   updateSequencePreview();
@@ -312,7 +312,7 @@ function resetBuilder() {
 
 function updateBuilderLabels() {
   let html = '';
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 2; i++) {
     html += `
       <div class="count-control">
         <span>${dispenserNames[i]}:</span>

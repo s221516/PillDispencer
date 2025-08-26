@@ -4,9 +4,7 @@
 #include "Displayer.h"
 
 ServoController::ServoController() 
-    : servos{ServoMotor(Config::SERVO_PINS[0]), ServoMotor(Config::SERVO_PINS[1]), 
-             ServoMotor(Config::SERVO_PINS[2]), ServoMotor(Config::SERVO_PINS[3]),
-             ServoMotor(Config::SERVO_PINS[4]), ServoMotor(Config::SERVO_PINS[5])},
+    : servos{ServoMotor(Config::SERVO_PINS[0]), ServoMotor(Config::SERVO_PINS[1])},
       piezoController(nullptr),
       angle(Config::DEFAULT_ANGLE), 
       startAngle(Config::DEFAULT_START_ANGLE), 

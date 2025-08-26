@@ -14,7 +14,7 @@ public:
     void initialize();
     void setPiezoController(PiezoController* piezoController);
     void moveServo(int servoIndex, int targetAngle);
-    bool fastDispenseWithFeedback(int servoIndex, int maxAttempts = 20);
+    bool fastDispenseWithFeedback(int servoIndex, int maxAttempts = 5);
     void resetAllServos();
     void toggle();
     void setAngle(int newAngle);

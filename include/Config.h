@@ -10,18 +10,18 @@ namespace Config {
 
     // Pin Configuration
     constexpr int LED_PIN = 2;
-    constexpr int SERVO_PINS[] = {14, 15, 16, 17, 18, 19};
+    constexpr int SERVO_PINS[] = {26, 25};  // Pin 26 confirmed working, pin 25 for expansion
     constexpr int NUM_SERVOS = sizeof(SERVO_PINS) / sizeof(SERVO_PINS[0]);
-    constexpr int PIEZO_PINS[] = {34};
-    constexpr const char* PIEZO_NAMES[] = {"GREEN"};
+    constexpr int PIEZO_PINS[] = {32, 33};
+    constexpr const char* PIEZO_NAMES[] = {"GREEN", "BLUE"};
     constexpr int NUM_PIEZOS = sizeof(PIEZO_PINS) / sizeof(PIEZO_PINS[0]);
     
     // Sensor Configuration
     constexpr int PIEZO_THRESHOLD = 50;
 
     // Servo Configuration
-    constexpr int DEFAULT_ANGLE = 80;
-    constexpr int DEFAULT_START_ANGLE = 0;
+    constexpr int DEFAULT_ANGLE = 70;        // Updated dispense angle
+    constexpr int DEFAULT_START_ANGLE = 0;  // Updated start angle
     constexpr int SERVO_DELAY_MS = 500;
 
     // Task Configuration

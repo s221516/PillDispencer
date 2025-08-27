@@ -55,6 +55,9 @@ bool ServoController::Dispense(int servoIndex, int maxAttempts) {
         return false;
     }
     
+    // Set which servo is currently dispensing for pattern analysis
+    piezoSensor->setCurrentServo(servoIndex);
+    
     for (int attempt = 1; attempt <= maxAttempts; attempt++) {
         
         piezoSensor->startTask();

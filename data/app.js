@@ -354,15 +354,17 @@ ws.onopen = function() {
 
 ws.onmessage = function(evt) {
   let message = evt.data;
-  log.innerHTML += message + "<br>";
-  log.scrollTop = log.scrollHeight;
   
-  // Handle graph data
+  // Handle graph data first (don't display in terminal)
   if (message.startsWith('[GRAPH]')) {
     console.log('Received graph message:', message);
     updatePiezoChart(message);
-    return; // Don't process further for graph messages
+    return; // Don't add to log or process further
   }
+  
+  // Add non-graph messages to terminal display
+  log.innerHTML += message + "<br>";
+  log.scrollTop = log.scrollHeight;
   
   // Only process sequence list messages meant for THIS device
   if (message.includes(`[INFO] Sequences for device ${deviceId}`)) {

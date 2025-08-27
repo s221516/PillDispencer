@@ -35,8 +35,8 @@ public:
 
 private:
     Displayer() : server(Config::WEB_SERVER_PORT), webSocket(Config::WEBSOCKET_PORT) {
-        // Create command queue that can hold up to 50 commands (increased from 10)
-        commandQueue = xQueueCreate(50, sizeof(char*));
+        // Create command queue that can hold up to 10 commands
+        commandQueue = xQueueCreate(10, sizeof(char*));
     }
     WebServer server;
     WebSocketsServer webSocket;

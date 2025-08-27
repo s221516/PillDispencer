@@ -92,6 +92,12 @@ void CommandHandler::processCommand(const String& command) {
     else if (command.startsWith("DELETE")) {
         handleDeleteCommand(command);
     }
+    else if (command.startsWith("RESETDATA")) {
+        handleResetDataCommand(command);
+    }
+    else if (command.startsWith("THRESHOLD")) {
+        handleThresholdCommand(command);
+    }
     else {
         Displayer::getInstance().logMessage("[ERR] Unknown command: " + command);
     }
@@ -244,5 +250,89 @@ void CommandHandler::handleFastCommand(const String& command) {
         Displayer::getInstance().logMessage("[CMD] Fast dispense test successful");
     } else {
         Displayer::getInstance().logMessage("[CMD] Fast dispense test failed");
+    }
+}
+
+void CommandHandler::handleResetDataCommand(const String& command) {
+    // Extract parameter: "RESETDATA N" or "RESETDATA ALL"
+    int spaceIndex = command.indexOf(' ');
+    if (spaceIndex == -1) {
+        Displayer::getInstance().logMessage("[ERR] Usage: RESETDATA <servo_number> or RESETDATA ALL");
+        return;
+    }
+    
+    String parameter = command.substring(spaceIndex + 1);
+    parameter.trim();
+    parameter.toUpperCase();
+    
+    if (parameter.equals("ALL")) {
+        // Reset all servo data
+        piezoController.resetAllData();
+        Displayer::getInstance().logMessage("[CMD] All learning data has been reset for all dispensers");
+    } else {
+        // Try to parse servo number
+        int servoNum = parameter.toInt();
+        if (servoNum >= 1 && servoNum <= Config::NUM_SERVOS) {
+            int servoIndex = servoNum - 1; // Convert to 0-based index
+            piezoController.resetServoData(servoIndex);
+            Displayer::getInstance().logMessage("[CMD] Learning data reset for dispenser " + String(servoNum));
+        } else {
+            Displayer::getInstance().logMessage("[ERR] Invalid servo number. Use 1-" + String(Config::NUM_SERVOS) + " or ALL");
+        }
+    }
+}
+
+void CommandHandler::handleThresholdCommand(const String& command) {
+    // Command format: THRESHOLD GET or THRESHOLD SET AVERAGE <value> or THRESHOLD SET CHANNEL <value>
+    int firstSpace = command.indexOf(' ');
+    if (firstSpace == -1) {
+        Displayer::getInstance().logMessage("[ERR] Invalid threshold command format");
+        return;
+    }
+    
+    String subCommand = command.substring(firstSpace + 1);
+    
+    if (subCommand.startsWith("GET")) {
+        float avgThreshold = piezoController.getAverageThreshold();
+        float chanThreshold = piezoController.getChannelThreshold();
+        
+        Displayer::getInstance().logMessage("[THRESH] Average: " + String(avgThreshold, 3) + 
+                                          ", Channel: " + String(chanThreshold, 3));
+    }
+    else if (subCommand.startsWith("SET")) {
+        // Parse "SET AVERAGE 0.85" or "SET CHANNEL 0.75"
+        String setParams = subCommand.substring(4); // Remove "SET "
+        int spacePos = setParams.indexOf(' ');
+        
+        if (spacePos == -1) {
+            Displayer::getInstance().logMessage("[ERR] Invalid threshold SET format");
+            return;
+        }
+        
+        String thresholdType = setParams.substring(0, spacePos);
+        String valueStr = setParams.substring(spacePos + 1);
+        
+        float value = valueStr.toFloat();
+        
+        if (thresholdType == "AVERAGE") {
+            if (piezoController.setAverageThreshold(value)) {
+                Displayer::getInstance().logMessage("[THRESH] Average threshold set to " + String(value, 3));
+            } else {
+                Displayer::getInstance().logMessage("[ERR] Invalid average threshold value (must be 0.0-1.0)");
+            }
+        }
+        else if (thresholdType == "CHANNEL") {
+            if (piezoController.setChannelThreshold(value)) {
+                Displayer::getInstance().logMessage("[THRESH] Channel threshold set to " + String(value, 3));
+            } else {
+                Displayer::getInstance().logMessage("[ERR] Invalid channel threshold value (must be 0.0-1.0)");
+            }
+        }
+        else {
+            Displayer::getInstance().logMessage("[ERR] Unknown threshold type: " + thresholdType);
+        }
+    }
+    else {
+        Displayer::getInstance().logMessage("[ERR] Unknown threshold command: " + subCommand);
     }
 }

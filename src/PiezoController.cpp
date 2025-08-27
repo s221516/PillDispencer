@@ -5,6 +5,7 @@ PiezoSensor::PiezoSensor()
     : isPillDrop(false),
       logCallback(nullptr),
       piezoMeasurements(Config::PIEZO_MEASUREMENTS),
+      currentServoIndex(0),
       piezoTaskHandle(NULL),
       timeoutActive(false),
       timeoutStart(0)
@@ -16,6 +17,11 @@ PiezoSensor::PiezoSensor()
 
     readySemaphore = xSemaphoreCreateBinary();
     finishedSemaphore = xSemaphoreCreateBinary();
+    
+    // Set up pattern analyzer
+    patternAnalyzer.setLogCallback([this](String msg) {
+        if (logCallback) logCallback(msg);
+    });
 }
 
 void PiezoSensor::initialize() {
@@ -96,14 +102,46 @@ void PiezoSensor::startRecording(int channel, int firstVal) {
         }
     }
     
-    
-    // Log all channels
-    for (int i = 0; i < Config::NUM_PIEZOS; i++) {
-        String msg = String("[PIEZO] ") + Config::PIEZO_NAMES[i] + " -> (";
-        msg += values[i] + ")";
+    //Muted loging of raw values
+    // // Log all channels
+    // for (int i = 0; i < Config::NUM_PIEZOS; i++) {
+    //     String msg = String("[PIEZO] ") + Config::PIEZO_NAMES[i] + " -> (";
+    //     msg += values[i] + ")";
                 
+    //     if (logCallback) {
+    //         logCallback(msg);
+    //     }
+    // }
+
+    // Convert string data to vectors for pattern analysis
+    std::vector<std::vector<int>> channelData(Config::NUM_PIEZOS);
+    
+    // Parse data for all channels
+    for (int ch = 0; ch < Config::NUM_PIEZOS; ch++) {
+        String channelStr = values[ch];
+        std::vector<int>& channelVector = channelData[ch];
+        
+        int startPos = 0;
+        while (true) {
+            int commaPos = channelStr.indexOf(", ", startPos);
+            if (commaPos == -1) {
+                channelVector.push_back(channelStr.substring(startPos).toInt());
+                break;
+            }
+            channelVector.push_back(channelStr.substring(startPos, commaPos).toInt());
+            startPos = commaPos + 2;
+        }
+    }
+    
+
+    // Analyze pattern
+    bool isNormalDispense = patternAnalyzer.analyzeDispensing(
+        currentServoIndex, channelData, String(Config::PIEZO_NAMES[channel])
+    );
+    
+    if (!isNormalDispense) {
         if (logCallback) {
-            logCallback(msg);
+            logCallback("[PATTERN] ⚠️  ABNORMAL DISPENSING DETECTED - possible multiple pills!");
         }
     }
 
@@ -128,6 +166,61 @@ void PiezoSensor::startRecording(int channel, int firstVal) {
     if (elapsedTime < targetTime) {
         vTaskDelay(targetTime - elapsedTime); // Sleep for remaining time
     }
+}
 
+String PiezoSensor::getAnalysisReport(int servoIndex) const {
+    return patternAnalyzer.getAnalysisReport(servoIndex);
+}
 
+int PiezoSensor::getFailedCount(int servoIndex) const {
+    return patternAnalyzer.getFailedCount(servoIndex);
+}
+
+void PiezoSensor::resetServoData(int servoIndex) {
+    patternAnalyzer.resetServoData(servoIndex);
+}
+
+void PiezoSensor::resetAllData() {
+    patternAnalyzer.resetAllData();
+}
+
+void PiezoSensor::setDeviationThreshold(float threshold) {
+    patternAnalyzer.setDeviationThreshold(threshold);
+}
+
+void PiezoSensor::setMinChannelThreshold(float threshold) {
+    patternAnalyzer.setMinChannelThreshold(threshold);
+}
+
+float PiezoSensor::getDeviationThreshold() const {
+    return patternAnalyzer.getDeviationThreshold();
+}
+
+float PiezoSensor::getMinChannelThreshold() const {
+    return patternAnalyzer.getMinChannelThreshold();
+}
+
+// Command interface aliases
+bool PiezoSensor::setAverageThreshold(float threshold) {
+    if (threshold >= 0.0f && threshold <= 1.0f) {
+        setDeviationThreshold(threshold);
+        return true;
+    }
+    return false;
+}
+
+bool PiezoSensor::setChannelThreshold(float threshold) {
+    if (threshold >= 0.0f && threshold <= 1.0f) {
+        setMinChannelThreshold(threshold);
+        return true;
+    }
+    return false;
+}
+
+float PiezoSensor::getAverageThreshold() const {
+    return getDeviationThreshold();
+}
+
+float PiezoSensor::getChannelThreshold() const {
+    return getMinChannelThreshold();
 }

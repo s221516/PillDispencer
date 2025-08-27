@@ -35,5 +35,7 @@ private:
     void handleExecuteCommand(const String& command);
     void handleListCommand(const String& command);
     void handleDeleteCommand(const String& command);
+    void handleResetDataCommand(const String& command);
+    void handleThresholdCommand(const String& command);
     void handlePiezoCommand(const String& command);
 };

@@ -26,7 +26,7 @@ namespace Config {
     constexpr int SERVO_DELAY_MS = 500;
 
     //Piezo configuration
-    constexpr int PIEZO_MEASUREMENTS = 10;
+    constexpr int PIEZO_MEASUREMENTS = 1000;
     constexpr int TASK_TIMEOUT_MS = 1000;
 
     // Task Configuration

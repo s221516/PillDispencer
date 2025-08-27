@@ -2,6 +2,7 @@
 #pragma once
 #include <Arduino.h>
 #include "Config.h"
+#include "PatternAnalyzer.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/semphr.h>
@@ -23,12 +24,35 @@ public:
     void startTimeout(); // Start the 1-second timeout timer
     void setPiezoMeasurements(int measurements) { piezoMeasurements = measurements; }
     int getPiezoMeasurements() const { return piezoMeasurements; }
+    
+    // Pattern analysis
+    void setCurrentServo(int servoIndex) { currentServoIndex = servoIndex; }
+    String getAnalysisReport(int servoIndex) const;
+    int getFailedCount(int servoIndex) const;
+    
+    // Data management
+    void resetServoData(int servoIndex);
+    void resetAllData();
+    
+    // Threshold management
+    void setDeviationThreshold(float threshold);
+    void setMinChannelThreshold(float threshold);
+    float getDeviationThreshold() const;
+    float getMinChannelThreshold() const;
+    
+    // Command interface aliases
+    bool setAverageThreshold(float threshold);
+    bool setChannelThreshold(float threshold);
+    float getAverageThreshold() const;
+    float getChannelThreshold() const;
 
 private:
     volatile bool isPillDrop;
     int piezoMeasurements;
+    int currentServoIndex;
     String values[Config::NUM_PIEZOS];
     LogCallback logCallback;
+    PatternAnalyzer patternAnalyzer;
     
     // Timeout control
     volatile bool timeoutActive;

@@ -95,11 +95,12 @@ void Displayer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, s
             Serial.println("[ERROR] Command queue full! Dropping command: " + incoming);
             free(commandCopy);  // Free memory if queue send failed
             
-            // Send error message to client
-            getInstance().webSocket.sendTXT(num, "[ERROR] Command queue full - command dropped");
+            // Send prominent error message to client
+            getInstance().webSocket.sendTXT(num, "[ERROR] ⚠️  QUEUE FULL! Command '" + incoming + "' was dropped. Please wait for current commands to finish.");
+            getInstance().logMessage("[QUEUE] ⚠️  Queue full! Dropped command: " + incoming + " (Queue limit: 10)");
         } else {
             UBaseType_t queueSize = uxQueueMessagesWaiting(getInstance().commandQueue);
-            Serial.println("[QUEUE] Command added. Queue size: " + String(queueSize));
+            getInstance().logMessage("[QUEUE] Processing: " + incoming + " (remaining: " + String(queueSize - 1) + ")");
         }
     } else if (type == WStype_CONNECTED) {
         getInstance().handleDeviceConnection(num);

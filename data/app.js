@@ -547,23 +547,7 @@ function initializePiezoChart() {
     type: 'line',
     data: {
       labels: [],
-      datasets: [{
-        label: 'GREEN Piezo',
-        data: [],
-        borderColor: 'rgb(34, 197, 94)',
-        backgroundColor: 'rgba(34, 197, 94, 0.1)',
-        borderWidth: 2,
-        fill: false,
-        tension: 0.1
-      }, {
-        label: 'BLUE Piezo',
-        data: [],
-        borderColor: 'rgb(59, 130, 246)',
-        backgroundColor: 'rgba(59, 130, 246, 0.1)', 
-        borderWidth: 2,
-        fill: false,
-        tension: 0.1
-      }]
+      datasets: [] // Start with empty datasets - will be created dynamically
     },
     options: {
       responsive: true,
@@ -658,13 +642,30 @@ function updatePiezoChart(graphData) {
     // Update chart data
     piezoChart.data.labels = labels;
     
-    // Update each channel
+    // Color palette for different piezos
+    const colors = [
+      { border: 'rgb(34, 197, 94)', bg: 'rgba(34, 197, 94, 0.1)' },   // Green
+      { border: 'rgb(59, 130, 246)', bg: 'rgba(59, 130, 246, 0.1)' }, // Blue
+      { border: 'rgb(239, 68, 68)', bg: 'rgba(239, 68, 68, 0.1)' },   // Red
+      { border: 'rgb(245, 158, 11)', bg: 'rgba(245, 158, 11, 0.1)' }, // Orange
+      { border: 'rgb(168, 85, 247)', bg: 'rgba(168, 85, 247, 0.1)' }, // Purple
+      { border: 'rgb(236, 72, 153)', bg: 'rgba(236, 72, 153, 0.1)' }, // Pink
+    ];
+    
+    // Create or update datasets dynamically
+    piezoChart.data.datasets = [];
     data.channels.forEach((channel, index) => {
-      if (index < piezoChart.data.datasets.length) {
-        piezoChart.data.datasets[index].data = channel.data;
-        piezoChart.data.datasets[index].label = channel.name + ' Piezo';
-        console.log(`Updated dataset ${index}:`, channel.name, channel.data);
-      }
+      const colorIndex = index % colors.length;
+      piezoChart.data.datasets.push({
+        label: channel.name + ' Piezo',
+        data: channel.data,
+        borderColor: colors[colorIndex].border,
+        backgroundColor: colors[colorIndex].bg,
+        borderWidth: 2,
+        fill: false,
+        tension: 0.1
+      });
+      console.log(`Created dataset ${index}:`, channel.name, channel.data);
     });
     
     piezoChart.update();

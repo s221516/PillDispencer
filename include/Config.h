@@ -12,8 +12,8 @@ namespace Config {
     constexpr int LED_PIN = 2;
     constexpr int SERVO_PINS[] = {26, 25};  // Pin 26 confirmed working, pin 25 for expansion
     constexpr int NUM_SERVOS = sizeof(SERVO_PINS) / sizeof(SERVO_PINS[0]);
-    constexpr int PIEZO_PINS[] = {32, 33};
-    constexpr const char* PIEZO_NAMES[] = {"GREEN", "BLUE"};
+    constexpr int PIEZO_PINS[] = {32,33};
+    constexpr const char* PIEZO_NAMES[] = {"GREEN", "BLUE", "RED", "ORANGE", "PURPLE", "PINK"};
     constexpr int NUM_PIEZOS = sizeof(PIEZO_PINS) / sizeof(PIEZO_PINS[0]);
     
     // Sensor Configuration

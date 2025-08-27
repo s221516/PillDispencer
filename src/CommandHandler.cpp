@@ -134,11 +134,11 @@ void CommandHandler::handleIndividualPill(const String& command) {
 
 void CommandHandler::handleMeasurementsCommand(const String& command) {
     int value = command.substring(12).toInt(); // Remove "MEASUREMENTS "
-    if (value >= 1 && value <= 50) {
+    if (value >= 1) {  // No upper limit
         piezoController.setPiezoMeasurements(value);
         Displayer::getInstance().logMessage("[CMD] Piezo measurements updated to " + String(value));
     } else {
-        Displayer::getInstance().logMessage("[ERR] Invalid MEASUREMENTS value. Must be 1–50.");
+        Displayer::getInstance().logMessage("[ERR] Invalid MEASUREMENTS value. Must be >= 1.");
     }
 }
 

@@ -12,6 +12,10 @@ let isParsingSequenceList = false;
 let dispenserNames = ['Dispenser 1', 'Dispenser 2'];
 let dispensingLog = [];
 
+// Graph management
+let piezoChart = null;
+let graphHistory = [];
+
 // Initialize
 function init() {
   deviceId = getDeviceId();
@@ -23,6 +27,12 @@ function init() {
   updateSequencePreview();
   updateDispensingLogDisplay();
   refreshSequences();
+  
+  // Initialize chart
+  console.log('About to initialize chart...');
+  setTimeout(() => {
+    initializePiezoChart();
+  }, 1000); // Wait 1 second for Chart.js to load
   
   // Add event listener for sequence name input
   document.getElementById('sequence-name').addEventListener('input', updateSequencePreview);
@@ -347,6 +357,13 @@ ws.onmessage = function(evt) {
   log.innerHTML += message + "<br>";
   log.scrollTop = log.scrollHeight;
   
+  // Handle graph data
+  if (message.startsWith('[GRAPH]')) {
+    console.log('Received graph message:', message);
+    updatePiezoChart(message);
+    return; // Don't process further for graph messages
+  }
+  
   // Only process sequence list messages meant for THIS device
   if (message.includes(`[INFO] Sequences for device ${deviceId}`)) {
     console.log('Starting fresh sequence list for OUR device:', deviceId);
@@ -402,7 +419,15 @@ function refreshSequences() {
   console.log('Refreshing sequences for device:', deviceId);
   sequences = []; // Clear existing sequences
   isParsingSequenceList = false; // Reset parsing state
-  ws.send('LIST ' + deviceId);
+  
+  // Check if WebSocket is ready
+  if (ws.readyState === WebSocket.OPEN) {
+    ws.send('LIST ' + deviceId);
+  } else {
+    console.log('WebSocket not ready, will refresh sequences when connected');
+    // Retry when WebSocket is ready
+    setTimeout(refreshSequences, 500);
+  }
 }
 
 function updateSequenceButtons() {
@@ -482,6 +507,201 @@ cmd.addEventListener("keydown", function(e) {
     cmd.value = "";
   }
 });
+
+// Piezo Chart Functions
+function initializePiezoChart() {
+  try {
+    console.log('Initializing piezo chart...');
+    console.log('Chart object:', typeof Chart);
+    
+    // Check if Chart.js is loaded
+    if (typeof Chart === 'undefined') {
+      console.error('Chart.js is not loaded! Check internet connection.');
+      document.getElementById('graph-status').textContent = 'Error: Chart.js not loaded (no internet?)';
+      
+      // Create a simple fallback display
+      const canvas = document.getElementById('piezoChart');
+      if (canvas) {
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '20px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Chart.js not available', canvas.width/2, canvas.height/2);
+        ctx.fillText('(Internet required)', canvas.width/2, canvas.height/2 + 30);
+      }
+      return;
+    }
+    
+    const canvas = document.getElementById('piezoChart');
+    if (!canvas) {
+      console.error('Canvas element not found!');
+      document.getElementById('graph-status').textContent = 'Error: Canvas not found';
+      return;
+    }
+    
+    console.log('Canvas element found:', canvas);
+    const ctx = canvas.getContext('2d');
+    console.log('Canvas context:', ctx);
+    
+    piezoChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [{
+        label: 'GREEN Piezo',
+        data: [],
+        borderColor: 'rgb(34, 197, 94)',
+        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+        borderWidth: 2,
+        fill: false,
+        tension: 0.1
+      }, {
+        label: 'BLUE Piezo',
+        data: [],
+        borderColor: 'rgb(59, 130, 246)',
+        backgroundColor: 'rgba(59, 130, 246, 0.1)', 
+        borderWidth: 2,
+        fill: false,
+        tension: 0.1
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: {
+          title: {
+            display: true,
+            text: 'Sample Number',
+            color: '#ffffff'
+          },
+          ticks: {
+            color: '#ffffff'
+          }
+        },
+        y: {
+          title: {
+            display: true,
+            text: 'ADC Value (0-4095)',
+            color: '#ffffff'
+          },
+          min: 0,
+          max: 4095,
+          ticks: {
+            color: '#ffffff'
+          }
+        }
+      },
+      plugins: {
+        title: {
+          display: true,
+          text: 'Piezo Sensor Readings',
+          color: '#ffffff'
+        },
+        legend: {
+          display: true,
+          labels: {
+            color: '#ffffff'
+          }
+        }
+      }
+    }
+  });
+  
+  console.log('Piezo chart initialized successfully');
+  document.getElementById('graph-status').textContent = 'Chart ready - waiting for data...';
+  
+  } catch (error) {
+    console.error('Error initializing piezo chart:', error);
+    document.getElementById('graph-status').textContent = 'Error initializing chart: ' + error.message;
+  }
+}
+
+function updatePiezoChart(graphData) {
+  try {
+    console.log('Processing graph data:', graphData);
+    const jsonPart = graphData.substring(8); // Remove "[GRAPH] " prefix
+    console.log('JSON part:', jsonPart);
+    const data = JSON.parse(jsonPart);
+    console.log('Parsed data:', data);
+    
+    // If Chart.js isn't available, show text data
+    if (typeof Chart === 'undefined' || !piezoChart) {
+      console.log('Showing text fallback for graph data');
+      const canvas = document.getElementById('piezoChart');
+      if (canvas && canvas.getContext) {
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '14px Arial';
+        ctx.textAlign = 'left';
+        
+        let y = 30;
+        ctx.fillText(`Trigger: ${data.trigger}`, 10, y);
+        y += 25;
+        
+        data.channels.forEach(channel => {
+          ctx.fillText(`${channel.name}: [${channel.data.join(', ')}]`, 10, y);
+          y += 20;
+        });
+      }
+      
+      document.getElementById('graph-status').textContent = `Text data - ${data.trigger} trigger at ${new Date().toLocaleTimeString()}`;
+      return;
+    }
+    
+    // Create labels (sample numbers)
+    const maxLength = Math.max(...data.channels.map(ch => ch.data.length));
+    const labels = Array.from({length: maxLength}, (_, i) => i + 1);
+    console.log('Labels:', labels);
+    
+    // Update chart data
+    piezoChart.data.labels = labels;
+    
+    // Update each channel
+    data.channels.forEach((channel, index) => {
+      if (index < piezoChart.data.datasets.length) {
+        piezoChart.data.datasets[index].data = channel.data;
+        piezoChart.data.datasets[index].label = channel.name + ' Piezo';
+        console.log(`Updated dataset ${index}:`, channel.name, channel.data);
+      }
+    });
+    
+    piezoChart.update();
+    console.log('Chart updated successfully');
+    
+    // Update status
+    document.getElementById('graph-status').textContent = `Last update: ${new Date().toLocaleTimeString()} (${data.trigger} trigger)`;
+    
+    // Store in history
+    graphHistory.push({
+      timestamp: new Date().toLocaleTimeString(),
+      trigger: data.trigger,
+      data: data
+    });
+    
+    // Update status
+    document.getElementById('graph-status').textContent = 
+      `Last reading: ${data.trigger} trigger at ${new Date().toLocaleTimeString()}`;
+    
+    console.log('Graph updated with trigger:', data.trigger);
+    
+  } catch (error) {
+    console.error('Error parsing graph data:', error);
+  }
+}
+
+function clearGraphHistory() {
+  graphHistory = [];
+  if (piezoChart) {
+    piezoChart.data.labels = [];
+    piezoChart.data.datasets.forEach(dataset => {
+      dataset.data = [];
+    });
+    piezoChart.update();
+  }
+  document.getElementById('graph-status').textContent = 'Graph cleared. Waiting for data...';
+}
 
 // Initialize when page loads
 window.onload = init;

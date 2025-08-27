@@ -107,6 +107,20 @@ void PiezoSensor::startRecording(int channel, int firstVal) {
         }
     }
 
+    // Send graph data in JSON format for visualization
+    if (logCallback) {
+        String graphData = "[GRAPH] {";
+        graphData += "\"trigger\":\"" + String(Config::PIEZO_NAMES[channel]) + "\",";
+        graphData += "\"channels\":[";
+        for (int i = 0; i < Config::NUM_PIEZOS; i++) {
+            if (i > 0) graphData += ",";
+            graphData += "{\"name\":\"" + String(Config::PIEZO_NAMES[i]) + "\",";
+            graphData += "\"data\":[" + values[i] + "]}";
+        }
+        graphData += "]}";
+        logCallback(graphData);
+    }
+
     // Calculate elapsed time and ensure total time is at least 1000ms
     TickType_t elapsedTime = xTaskGetTickCount() - startTime;
     TickType_t targetTime = pdMS_TO_TICKS(Config::TASK_TIMEOUT_MS*0.8);

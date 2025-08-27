@@ -17,8 +17,12 @@ h3 { color: #ffffff; margin-top: 0; }
   gap: 20px;
 }
 
+.graph-section {
+  grid-column: 1 / -1; /* Span full width */
+}
+
 .terminal-section, .dispenser-section, .sequence-section, 
-.sequence-builder, .log-section {
+.sequence-builder, .log-section, .graph-section {
   background: rgba(0, 0, 0, 0.3);
   padding: 20px;
   border-radius: 12px;
@@ -173,6 +177,23 @@ input {
   border: none;
   border-radius: 6px;
   cursor: pointer;
+}
+
+.graph-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 10px;
+}
+
+#graph-status {
+  font-size: 14px;
+  color: #4fc3f7;
+}
+
+#piezoChart {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
 }
 
 @media (max-width: 768px) {

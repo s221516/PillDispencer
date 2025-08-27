@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <title>ESP32 Pill Dispenser</title>
   <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
   <h2>💊 ESP32 Pill Dispenser</h2>
@@ -21,6 +22,17 @@
     <div class="dispenser-section">
       <h3>🏥 Dispensers</h3>
       <div id="dispensers"></div>
+    </div>
+    
+    <div class="graph-section">
+      <h3>📊 Piezo Analysis</h3>
+      <div style="position: relative; height: 400px; margin-bottom: 20px;">
+        <canvas id="piezoChart"></canvas>
+      </div>
+      <div class="graph-controls">
+        <button onclick="clearGraphHistory()" class="clear-log-btn">🗑️ Clear Graph History</button>
+        <span id="graph-status">Waiting for data...</span>
+      </div>
     </div>
     
     <div class="sequence-section">

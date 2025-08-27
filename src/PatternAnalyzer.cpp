@@ -174,7 +174,22 @@ bool PatternAnalyzer::analyzeDispensing(
         
         float avgSimilarity = totalSimilarity / Config::NUM_PIEZOS;
         bool avgGood = avgSimilarity >= DEVIATION_THRESHOLD;
-        bool isNormal = avgGood && allChannelsGood;  // Both conditions must be met
+        
+        // BEST-OF-BOTH APPROACH: Accept if either the average is good OR any single channel is excellent
+        // This handles cases where pill drops to one side and primarily hits one sensor
+        float maxChannelSim = 0.0f;
+        String bestChannel = "";
+        for (int i = 0; i < Config::NUM_PIEZOS; i++) {
+            float channelSim = calculateSimilarity(record.channelEnvelopes[i], 
+                                                 referencePattern[servoIndex].channelEnvelopes[i]);
+            if (channelSim > maxChannelSim) {
+                maxChannelSim = channelSim;
+                bestChannel = String(Config::PIEZO_NAMES[i]);
+            }
+        }
+        
+        bool bestChannelExcellent = maxChannelSim >= DEVIATION_THRESHOLD;
+        bool isNormal = avgGood || bestChannelExcellent;  // Accept if EITHER condition is met
         
         if (logCallback) {
             String simDetails = "Similarities: ";
@@ -186,14 +201,18 @@ bool PatternAnalyzer::analyzeDispensing(
             }
             
             String reasonStr = "";
-            if (!avgGood) reasonStr += "Low average (" + String(avgSimilarity, 3) + " < " + String(DEVIATION_THRESHOLD, 2) + ")";
-            if (!allChannelsGood) {
-                if (reasonStr.length() > 0) reasonStr += ", ";
-                reasonStr += "Poor " + problematicChannel + " channel (" + String(lowestChannelSim, 3) + " < " + String(MIN_CHANNEL_THRESHOLD, 2) + ")";
+            if (!avgGood && !bestChannelExcellent) {
+                reasonStr += "Both average (" + String(avgSimilarity, 3) + " < " + String(DEVIATION_THRESHOLD, 2) + 
+                           ") and best channel " + bestChannel + " (" + String(maxChannelSim, 3) + " < " + String(DEVIATION_THRESHOLD, 2) + ") below threshold";
             }
             
             logCallback("[PATTERN] Avg similarity: " + String(avgSimilarity, 3) + 
+                       ", Best: " + bestChannel + " " + String(maxChannelSim, 3) + 
                        " (" + simDetails + ") - " + (isNormal ? "NORMAL" : "ABNORMAL"));
+            
+            if (isNormal && !avgGood && bestChannelExcellent) {
+                logCallback("[PATTERN] Accepted via best-of-both: " + bestChannel + " sensor shows good similarity");
+            }
             
             if (!isNormal) {
                 logCallback("[PATTERN] Rejection reason: " + reasonStr);

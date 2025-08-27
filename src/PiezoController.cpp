@@ -145,7 +145,7 @@ void PiezoSensor::startRecording(int channel, int firstVal) {
         }
     }
 
-    // Send graph data in JSON format for visualization
+    // Send graph data in JSON format for visualization (compressed for WebSocket stability)
     if (logCallback) {
         String graphData = "[GRAPH] {";
         graphData += "\"trigger\":\"" + String(Config::PIEZO_NAMES[channel]) + "\",";
@@ -153,10 +153,50 @@ void PiezoSensor::startRecording(int channel, int firstVal) {
         for (int i = 0; i < Config::NUM_PIEZOS; i++) {
             if (i > 0) graphData += ",";
             graphData += "{\"name\":\"" + String(Config::PIEZO_NAMES[i]) + "\",";
-            graphData += "\"data\":[" + values[i] + "]}";
+            
+            // Compress data much more aggressively - send every 10th measurement instead of 5th
+            String compressedData = "";
+            String fullData = values[i];
+            int commaCount = 0;
+            int lastComma = -1;
+            
+            for (int pos = 0; pos < fullData.length(); pos++) {
+                if (fullData[pos] == ',') {
+                    commaCount++;
+                    if (commaCount % 10 == 0) { // Every 10th measurement for smaller data
+                        if (compressedData.length() > 0) compressedData += ",";
+                        compressedData += fullData.substring(lastComma + 1, pos);
+                    }
+                    lastComma = pos;
+                }
+            }
+            // Add the last value
+            if (commaCount % 5 == 0) {
+                if (compressedData.length() > 0) compressedData += ",";
+                compressedData += fullData.substring(lastComma + 1);
+            }
+            
+            graphData += "\"data\":[" + compressedData + "]}";
         }
         graphData += "]}";
-        logCallback(graphData);
+        
+        // Validate that the JSON contains only valid UTF-8 characters
+        bool isValidUTF8 = true;
+        for (int i = 0; i < graphData.length(); i++) {
+            char c = graphData.charAt(i);
+            // Check for control characters or invalid UTF-8
+            if (c < 32 && c != '\n' && c != '\r' && c != '\t') {
+                isValidUTF8 = false;
+                break;
+            }
+        }
+        
+        if (isValidUTF8 && graphData.length() < 8000) {
+            // Send graph data but with additional safety measures
+            logCallback(graphData);
+        } else {
+            Serial.println("[WARN] Invalid UTF-8 or oversized graph data, skipping");
+        }
     }
 
     // Calculate elapsed time and ensure total time is at least 1000ms

@@ -63,6 +63,24 @@ void Displayer::setWebSocketEventHandler() {
 
 void Displayer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length) {
     if (type == WStype_TEXT) {
+        // Check rate limiting first
+        if (getInstance().isClientThrottled(num)) {
+            Serial.println("[THROTTLE] Blocking command from throttled client " + String(num));
+            
+            // Send throttle reminder every 5 seconds so user knows they're still blocked
+            ConnectedDevice& device = getInstance().connectedDevices[num];
+            unsigned long currentTime = millis();
+            static unsigned long lastThrottleReminder = 0;
+            
+            if (currentTime - lastThrottleReminder > 5000) {  // Every 5 seconds
+                unsigned long timeLeft = (device.throttleEndTime - currentTime) / 1000;
+                String reminderMsg = "[THROTTLE] ⏳ Still cooling down! " + String(timeLeft) + " seconds remaining...";
+                getInstance().webSocket.sendTXT(num, reminderMsg.c_str());
+                lastThrottleReminder = currentTime;
+            }
+            return;  // Drop commands from throttled clients
+        }
+        
         // Properly handle payload with known length
         String incoming = "";
         if (length > 0 && payload != nullptr) {
@@ -81,13 +99,47 @@ void Displayer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, s
             return;
         }
         
+        // Update rate limiting for this client
+        getInstance().updateClientRateLimit(num);
+        
+        // Check if client got throttled by this command
+        if (getInstance().isClientThrottled(num)) {
+            Serial.println("[THROTTLE] Client " + String(num) + " throttled after command: " + incoming);
+            return;  // Don't process this command
+        }
+        
         Serial.println("[WS] Received: " + incoming);
         
-        // Immediately acknowledge receipt to sender
-        getInstance().webSocket.sendTXT(num, "[ACK] Received: " + incoming);
+        // Check queue size before sending ACK
+        UBaseType_t currentQueueSize = uxQueueMessagesWaiting(getInstance().commandQueue);
         
-        // Add command to queue (thread-safe)
+        // Stricter throttling for PILL commands to prevent crashes
+        if (incoming.startsWith("PILL ")) {
+            // Only send ACK for first command, throttle the rest more aggressively
+            if (currentQueueSize == 0) {
+                String ackMsg = "[ACK] Received: " + incoming;
+                getInstance().webSocket.sendTXT(num, ackMsg.c_str());
+            } else {
+                // For all subsequent PILL commands, just log to serial
+                Serial.println("[ACK] Received (throttled): " + incoming);
+            }
+        } else {
+            // Send ACK for non-PILL commands
+            String ackMsg = "[ACK] Received: " + incoming;
+            getInstance().webSocket.sendTXT(num, ackMsg.c_str());
+        }
+        
+        // Add command to queue (thread-safe) with bounds checking
+        if (incoming.length() > 100) {  // Sanity check for reasonable command length
+            Serial.println("[ERROR] Command too long, ignoring: " + String(incoming.length()) + " chars");
+            return;
+        }
+        
         char* commandCopy = (char*)malloc(incoming.length() + 1);
+        if (commandCopy == NULL) {
+            Serial.println("[ERROR] Failed to allocate memory for command");
+            return;
+        }
         strcpy(commandCopy, incoming.c_str());
         
         BaseType_t result = xQueueSend(getInstance().commandQueue, &commandCopy, 0);
@@ -95,12 +147,23 @@ void Displayer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, s
             Serial.println("[ERROR] Command queue full! Dropping command: " + incoming);
             free(commandCopy);  // Free memory if queue send failed
             
-            // Send prominent error message to client
-            getInstance().webSocket.sendTXT(num, "[ERROR] ⚠️  QUEUE FULL! Command '" + incoming + "' was dropped. Please wait for current commands to finish.");
-            getInstance().logMessage("[QUEUE] ⚠️  Queue full! Dropped command: " + incoming + " (Queue limit: 10)");
+            // Send error message safely
+            String errorMsg = "[ERROR] QUEUE FULL! Command dropped.";
+            getInstance().webSocket.sendTXT(num, errorMsg.c_str());
+            getInstance().logMessage("[QUEUE] Queue full! Dropped command (Queue limit: 10)");
         } else {
             UBaseType_t queueSize = uxQueueMessagesWaiting(getInstance().commandQueue);
-            getInstance().logMessage("[QUEUE] Processing: " + incoming + " (remaining: " + String(queueSize - 1) + ")");
+            // Only send queue status for every 3rd queued command to reduce WebSocket spam
+            static int queueMessageCounter = 0;
+            queueMessageCounter++;
+            
+            if (queueMessageCounter % 3 == 0 || queueSize <= 1) {
+                String queueMsg = "[QUEUE] Processing: " + incoming + " (remaining: " + String(queueSize - 1) + ")";
+                getInstance().logMessage(queueMsg);
+            }
+            
+            // Always log to serial for debugging
+            Serial.println("[QUEUE] Processing: " + incoming + " (remaining: " + String(queueSize - 1) + ")");
         }
     } else if (type == WStype_CONNECTED) {
         getInstance().handleDeviceConnection(num);
@@ -110,8 +173,34 @@ void Displayer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, s
 }
 
 void Displayer::broadcast(const String& message) {
-    String msg = message;  // Create non-const copy for WebSocket library
-    webSocket.broadcastTXT(msg);
+    // Validate UTF-8 encoding before sending
+    bool isValidUTF8 = true;
+    for (int i = 0; i < message.length(); i++) {
+        char c = message.charAt(i);
+        // Check for control characters that could break UTF-8
+        if (c < 32 && c != '\n' && c != '\r' && c != '\t') {
+            isValidUTF8 = false;
+            Serial.println("[ERROR] Invalid character found at position " + String(i) + ": " + String((int)c));
+            break;
+        }
+    }
+    
+    if (!isValidUTF8) {
+        Serial.println("[ERROR] Message contains invalid UTF-8, not broadcasting");
+        return;
+    }
+    
+    // Add bounds checking and safety for WebSocket broadcast
+    // Allow larger messages for graph data, smaller for other messages
+    int maxLength = message.startsWith("[GRAPH]") ? 8000 : 500;
+    
+    if (message.length() > maxLength) {
+        Serial.println("[WARN] Message too long for broadcast, truncating");
+        String truncated = message.substring(0, maxLength) + "...";
+        webSocket.broadcastTXT(truncated.c_str());
+    } else {
+        webSocket.broadcastTXT(message.c_str());
+    }
     updateConnectedDevicesActivity();
 }
 
@@ -212,6 +301,10 @@ void Displayer::handleDeviceConnection(uint8_t clientId) {
     ConnectedDevice device;
     device.connectedTime = millis();
     device.lastActivity = millis();
+    device.commandCount = 0;         // Initialize rate limiting
+    device.windowStartTime = millis(); // Start rate limit window
+    device.isThrottled = false;      // Not throttled initially
+    device.throttleEndTime = 0;      // No throttle end time
     connectedDevices[clientId] = device;
     
     String message = "[CONNECT] Client " + String(clientId) + " connected";
@@ -241,11 +334,93 @@ void Displayer::updateConnectedDevicesActivity() {
 }
 
 void Displayer::logMessage(const String& msg) {
-    Serial.println(msg);
-    broadcast(msg);
+    // Check if this is graph data - send to web but not to serial to keep serial clean
+    if (msg.startsWith("[GRAPH]")) {
+        broadcast(msg);  // Send to web interface for graphs
+        // Don't print the full graph data to serial to avoid spam
+    } else {
+        Serial.println(msg);  // Print other messages to serial
+        broadcast(msg);       // Send to web interface
+    }
 }
 
 void Displayer::handleClients() {
     server.handleClient();  // Process HTTP requests
     webSocket.loop();       // Process WebSocket connections
+}
+
+bool Displayer::isClientThrottled(uint8_t clientId) {
+    if (connectedDevices.find(clientId) == connectedDevices.end()) {
+        return false;  // Client not found, not throttled
+    }
+    
+    ConnectedDevice& device = connectedDevices[clientId];
+    unsigned long currentTime = millis();
+    
+    // Check if throttle period has ended
+    if (device.isThrottled && currentTime >= device.throttleEndTime) {
+        device.isThrottled = false;
+        device.commandCount = 0;
+        device.windowStartTime = currentTime;
+        Serial.println("[THROTTLE] Client " + String(clientId) + " throttle period ended");
+        
+        // Send "unblocked" notification to client
+        String unblockedMsg = "[THROTTLE] ✅ Cooldown finished! You can now use the system again.";
+        getInstance().webSocket.sendTXT(clientId, unblockedMsg.c_str());
+    }
+    
+    return device.isThrottled;
+}
+
+void Displayer::updateClientRateLimit(uint8_t clientId) {
+    // Rate limit: Max 10 commands per 5 seconds, 30 second cooldown if exceeded
+    const unsigned long RATE_WINDOW = 5000;      // 5 seconds
+    const unsigned long MAX_COMMANDS = 10;       // Max commands per window
+    const unsigned long THROTTLE_DURATION = 30000; // 30 second cooldown
+    
+    if (connectedDevices.find(clientId) == connectedDevices.end()) {
+        return;  // Client not found
+    }
+    
+    ConnectedDevice& device = connectedDevices[clientId];
+    unsigned long currentTime = millis();
+    
+    // If already throttled, don't update counters
+    if (device.isThrottled) {
+        return;
+    }
+    
+    // Reset window if enough time has passed
+    if (currentTime - device.windowStartTime > RATE_WINDOW) {
+        device.commandCount = 0;
+        device.windowStartTime = currentTime;
+    }
+    
+    // Increment command count
+    device.commandCount++;
+    
+    // Warn user when approaching rate limit
+    if (device.commandCount == MAX_COMMANDS - 2) {  // 2 commands before limit
+        String warningMsg = "[THROTTLE] ⚠️ Warning: Slow down! Only " + String(MAX_COMMANDS - device.commandCount) + " commands left before cooldown.";
+        getInstance().webSocket.sendTXT(clientId, warningMsg.c_str());
+    }
+    
+    // Check if rate limit exceeded
+    if (device.commandCount > MAX_COMMANDS) {
+        device.isThrottled = true;
+        device.throttleEndTime = currentTime + THROTTLE_DURATION;
+        
+        Serial.println("[THROTTLE] Client " + String(clientId) + " rate limited for " + String(THROTTLE_DURATION/1000) + " seconds");
+        
+        // Send comprehensive throttle message to client
+        String throttleMsg = "[THROTTLE] 🚫 RATE LIMIT EXCEEDED! 🚫\n";
+        throttleMsg += "You sent too many commands too quickly.\n";
+        throttleMsg += "Commands are blocked for " + String(THROTTLE_DURATION/1000) + " seconds.\n";
+        throttleMsg += "Please wait before trying again...";
+        webSocket.sendTXT(clientId, throttleMsg.c_str());
+        
+        // Also send a countdown notification
+        String countdownMsg = "[THROTTLE] ⏰ Cooldown: " + String(THROTTLE_DURATION/1000) + " seconds remaining";
+        webSocket.sendTXT(clientId, countdownMsg.c_str());
+    }
 }

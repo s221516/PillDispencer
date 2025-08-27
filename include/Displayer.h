@@ -17,6 +17,10 @@ struct ConnectedDevice {
     String ipAddress;
     unsigned long connectedTime;
     unsigned long lastActivity;
+    unsigned long commandCount;        // Commands sent in current window
+    unsigned long windowStartTime;     // When current rate limit window started
+    bool isThrottled;                  // Whether client is in cooldown
+    unsigned long throttleEndTime;     // When throttling ends
 };
 
 class Displayer {
@@ -32,6 +36,8 @@ public:
     bool hasCommands();  // Check if there are queued commands
     void sendConnectedDevices();
     int getConnectedDeviceCount();
+    bool isClientThrottled(uint8_t clientId);   // Check if client is rate limited
+    void updateClientRateLimit(uint8_t clientId); // Update client's rate limit status
 
 private:
     Displayer() : server(Config::WEB_SERVER_PORT), webSocket(Config::WEBSOCKET_PORT) {

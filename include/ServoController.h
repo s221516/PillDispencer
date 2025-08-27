@@ -6,15 +6,15 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 
-class PiezoController; // Forward declaration
+class PiezoSensor; // Forward declaration
 
 class ServoController {
 public:
     ServoController();
     void initialize();
-    void setPiezoController(PiezoController* piezoController);
+    void setPiezoSensor(PiezoSensor* piezoController);
     void moveServo(int servoIndex, int targetAngle);
-    bool fastDispenseWithFeedback(int servoIndex, int maxAttempts = 5);
+    bool Dispense(int servoIndex, int maxAttempts = 5);
     void resetAllServos();
     void toggle();
     void setAngle(int newAngle);
@@ -27,12 +27,9 @@ public:
 
 private:
     ServoMotor servos[Config::NUM_SERVOS];
-    PiezoController* piezoController;
+    PiezoSensor* piezoSensor;
     int angle;
     int startAngle;
     int counter;
     bool atStart;
-    
-    // Mutex to prevent concurrent dispensing operations
-    SemaphoreHandle_t dispenseMutex;
 };

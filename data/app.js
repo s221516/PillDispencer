@@ -71,7 +71,7 @@ function dispensePill(dispenserIndex) {
     return;
   }
   
-  const message = `START ${dispenserIndex}`;
+  const message = `PILL ${dispenserIndex}`;
   console.log('Sending WebSocket message:', message);
   ws.send(message);
   
@@ -457,6 +457,12 @@ function loadDispensingLog() {
 cmd.addEventListener("keydown", function(e) {
   if (e.key === "Enter") {
     let command = cmd.value.trim();
+    
+    // Don't send empty commands
+    if (command === "") {
+      cmd.value = "";
+      return;
+    }
     
     // Auto-add device ID to commands that need it
     if (command.startsWith('SEQUENCE ') && !command.match(/SEQUENCE\s+device_\w+/)) {

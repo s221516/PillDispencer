@@ -65,5 +65,5 @@ void ServoMotor::moveTo(int targetAngle) {
 }
 
 void ServoMotor::reset() {
-    moveAndRelease(180);
+    moveAndRelease(Config::RESET_ANGLE);
 }

@@ -12,13 +12,13 @@ class ServoController;
 
 class CommandHandler {
 public:
-    CommandHandler(ServoController& servo, PiezoController& piezo, SequenceManager& sequenceManager);
+    CommandHandler(ServoController& servo, PiezoSensor& piezo, SequenceManager& sequenceManager);
     void initialize();
     void startTask();
 
 private:
     ServoController& servoController;
-    PiezoController& piezoController;
+    PiezoSensor& piezoController;
     SequenceManager& sequenceManager;
     
     static void commandTaskWrapper(void* parameter);
@@ -27,9 +27,10 @@ private:
     void handleResetCommand();
     void handleTestCommand();
     void handleFastCommand(const String& command);
-    void handleToggleCommand();
+    void handleStartAngleCommand(const String& command);
     void handleAngleCommand(const String& command);
-    void handleStartCommand(const String& command);
+    void handleIndividualPill(const String& command);
+    void handleMeasurementsCommand(const String& command);
     void handleSequenceCommand(const String& command);
     void handleExecuteCommand(const String& command);
     void handleListCommand(const String& command);

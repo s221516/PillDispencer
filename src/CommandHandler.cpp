@@ -1,13 +1,13 @@
 // src/CommandHandler.cpp
 #include "CommandHandler.h"
 
-CommandHandler::CommandHandler(ServoController& servo, PiezoController& piezo, SequenceManager& sequenceManager)
+CommandHandler::CommandHandler(ServoController& servo, PiezoSensor& piezo, SequenceManager& sequenceManager)
     : servoController(servo), piezoController(piezo), sequenceManager(sequenceManager) {
 }
 
 void CommandHandler::initialize() {
     Displayer::getInstance().logMessage("Dispenser started");
-    Displayer::getInstance().logMessage("Commands: reset | [ENTER] toggle | ANGLE <value> | START <value> | test");
+    Displayer::getInstance().logMessage("Commands: reset | test | ANGLE <value> | STARTANGLE <value> | PILL <value> | MEASUREMENTS <value>");
     Displayer::getInstance().logMessage("Fast dispense: FAST <servo_number> - test fast dispensing");
     Displayer::getInstance().logMessage("Sequence commands: SEQUENCE <device> <name> (1,1,0,2,0,6) | EXECUTE <device> <name> | LIST <device> | DELETE <device> <name>");
 }
@@ -24,26 +24,34 @@ void CommandHandler::commandTaskWrapper(void* parameter) {
 void CommandHandler::commandTask() {
     while (true) {
         String command = "";
+        bool hasCommand = false;
         
         // Check Serial first
         if (Serial.available() > 0) {
             command = Serial.readStringUntil('\n');
+            hasCommand = true;
         }
         
         // Check WebSocket command buffer
-        String webCommand = Displayer::getInstance().getCommandBuffer();
-        if (webCommand.length() > 0) {
-            command = webCommand;
-            Displayer::getInstance().logMessage("[QUEUE] Processing: " + command + " (remaining: " + String(Displayer::getInstance().hasCommands() ? "yes" : "no") + ")");
-            Displayer::getInstance().clearCommandBuffer();
+        if (!hasCommand) {
+            String webCommand = Displayer::getInstance().getCommandBuffer();
+            if (webCommand.length() > 0) {
+                command = webCommand;
+                hasCommand = true;
+                Displayer::getInstance().logMessage("[QUEUE] Processing: " + command + " (remaining: " + String(Displayer::getInstance().hasCommands() ? "yes" : "no") + ")");
+                Displayer::getInstance().clearCommandBuffer();
+            }
         }
 
         // Process command if we have one
-        if (command.length() > 0) {
+        if (hasCommand && command.length() > 0) {
             command.trim();
-            Displayer::getInstance().logMessage("[CMD] About to process: " + command);
-            processCommand(command);
-            Displayer::getInstance().logMessage("[CMD] Finished processing: " + command);
+            // Skip empty commands after trimming
+            if (command.length() > 0) {
+                Displayer::getInstance().logMessage("[CMD] About to process: " + command);
+                processCommand(command);
+                Displayer::getInstance().logMessage("[CMD] Finished processing: " + command);
+            }
         }
 
         vTaskDelay(Config::TASK_DELAY_MS / portTICK_PERIOD_MS);
@@ -60,14 +68,17 @@ void CommandHandler::processCommand(const String& command) {
     else if (command.startsWith("FAST")) {
         handleFastCommand(command);
     }
-    else if (command.length() == 0) {
-        handleToggleCommand();
-    }
     else if (command.startsWith("ANGLE")) {
         handleAngleCommand(command);
     }
-    else if (command.startsWith("START")) {
-        handleStartCommand(command);
+    else if (command.startsWith("STARTANGLE")) {
+        handleStartAngleCommand(command);
+    }
+    else if (command.startsWith("PILL")) {
+        handleIndividualPill(command);
+    }
+    else if (command.startsWith("MEASUREMENTS")) {
+        handleMeasurementsCommand(command);
     }
     else if (command.startsWith("SEQUENCE")) {
         handleSequenceCommand(command);
@@ -96,19 +107,6 @@ void CommandHandler::handleTestCommand() {
     Displayer::getInstance().logMessage("[CMD] Servo counter reset.");
 }
 
-void CommandHandler::handleToggleCommand() {
-    servoController.toggle();
-    if (servoController.isAtStart()) {
-        Displayer::getInstance().logMessage("[RUN] Start angle: " + 
-            String(servoController.getStartAngle()) + "° | Counter: " + 
-            String(servoController.getCounter()));
-    } else {
-        Displayer::getInstance().logMessage("[RUN] Angle: " + 
-            String(servoController.getAngle()) + "° | Counter: " + 
-            String(servoController.getCounter()));
-    }
-}
-
 void CommandHandler::handleAngleCommand(const String& command) {
     int value = command.substring(6).toInt();
     if (value >= 0 && value <= 180) {
@@ -119,26 +117,38 @@ void CommandHandler::handleAngleCommand(const String& command) {
     }
 }
 
-void CommandHandler::handleStartCommand(const String& command) {
-    int value = command.substring(6).toInt();
+void CommandHandler::handleIndividualPill(const String& command) {
+    int value = command.substring(5).toInt();
     
-    // Check if this is for individual servo dispensing (START 1-6)
     if (value >= 1 && value <= 6) {
         int servoIndex = value - 1; // Convert to 0-based index
         Displayer::getInstance().logMessage("[CMD] Dispensing pill from servo " + String(value));
         
-        if (servoController.fastDispenseWithFeedback(servoIndex)) {
+        if (servoController.Dispense(servoIndex)) {
             Displayer::getInstance().logMessage("[CMD] Pill successfully dispensed from servo " + String(value));
         } else {
             Displayer::getInstance().logMessage("[CMD] Failed to dispense pill from servo " + String(value) + " - check if bottle is empty");
         }
     }
-    // Check if this is for setting start angle (START 0-180)
-    else if (value >= 0 && value <= 180) {
+}
+
+void CommandHandler::handleMeasurementsCommand(const String& command) {
+    int value = command.substring(12).toInt(); // Remove "MEASUREMENTS "
+    if (value >= 1 && value <= 50) {
+        piezoController.setPiezoMeasurements(value);
+        Displayer::getInstance().logMessage("[CMD] Piezo measurements updated to " + String(value));
+    } else {
+        Displayer::getInstance().logMessage("[ERR] Invalid MEASUREMENTS value. Must be 1–50.");
+    }
+}
+
+void CommandHandler::handleStartAngleCommand(const String& command) {
+    int value = command.substring(11).toInt();
+    if (value >= 0 && value <= 180) {
         servoController.setStartAngle(value);
         Displayer::getInstance().logMessage("[CMD] Start angle updated to " + String(value) + "°");
     } else {
-        Displayer::getInstance().logMessage("[ERR] Invalid START value. Use 1-6 for servo dispensing or 0-180 for start angle.");
+        Displayer::getInstance().logMessage("[ERR] Invalid START value. Must be 0–180.");
     }
 }
 
@@ -230,7 +240,7 @@ void CommandHandler::handleFastCommand(const String& command) {
     int servoIndex = servoNum - 1; // Convert to 0-based index
     Displayer::getInstance().logMessage("[CMD] Testing fast dispense on servo " + String(servoNum));
     
-    if (servoController.fastDispenseWithFeedback(servoIndex, 5)) {
+    if (servoController.Dispense(servoIndex, 5)) {
         Displayer::getInstance().logMessage("[CMD] Fast dispense test successful");
     } else {
         Displayer::getInstance().logMessage("[CMD] Fast dispense test failed");

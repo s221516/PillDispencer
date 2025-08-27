@@ -95,7 +95,8 @@ bool SequenceManager::executeSequence(const String& deviceId, const String& name
 void SequenceManager::executeServoSequence(const std::vector<int>& counts) {
     int totalPills = 0;
     int successfulPills = 0;
-    
+    int failedPills = 0;
+
     for (int servoIndex = 0; servoIndex < Config::NUM_SERVOS && servoIndex < counts.size(); servoIndex++) {
         int runCount = counts[servoIndex];
         
@@ -103,16 +104,15 @@ void SequenceManager::executeServoSequence(const std::vector<int>& counts) {
             totalPills++;
             Displayer::getInstance().logMessage("[SEQ] Dispensing pill " + String(totalPills) + " from servo " + String(servoIndex + 1) + " (run " + String(run + 1) + "/" + String(runCount) + ")");
             
-            // Use fast feedback-based dispensing (automatically uses new approach)
-            if (servoController.fastDispenseWithFeedback(servoIndex)) {
+
+            if (servoController.Dispense(servoIndex)) {
                 successfulPills++;
             } else {
-                Displayer::getInstance().logMessage("[ERR] Failed to dispense pill from servo " + String(servoIndex + 1) + " - may be empty or jammed");
+                failedPills++;
             }
         }
     }
-    
-    Displayer::getInstance().logMessage("[SEQ] Sequence completed: " + String(successfulPills) + "/" + String(totalPills) + " pills successfully dispensed");
+    Displayer::getInstance().logMessage("[SEQ] Sequence complete: " + String(successfulPills) + " pills dispensed, " + String(failedPills) + " failures");
 }
 
 bool SequenceManager::deleteSequence(const String& deviceId, const String& name) {

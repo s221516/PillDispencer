@@ -9,28 +9,27 @@
 
 // Global objects
 ServoController servoController;
-PiezoController piezoController;
+PiezoSensor piezoSensor;
 SequenceManager sequenceManager(servoController);
-CommandHandler commandHandler(servoController, piezoController, sequenceManager);
+CommandHandler commandHandler(servoController, piezoSensor, sequenceManager);
 
 void setup() {
     Serial.begin(115200);
     
     // Initialize all components
     Displayer::getInstance().initialize();
-    piezoController.initialize();
+    piezoSensor.initialize();  // Initialize piezo sensor
     servoController.initialize();
-    servoController.setPiezoController(&piezoController);
+    servoController.setPiezoSensor(&piezoSensor);
     sequenceManager.initialize();
     commandHandler.initialize();
     
     // Set up the piezo log callback
-    piezoController.setLogCallback([](const String& msg) {
+    piezoSensor.setLogCallback([](const String& msg) {
         Displayer::getInstance().logMessage(msg);
     });
     
     // Start tasks
-    piezoController.startTask();
     commandHandler.startTask();
 }
 

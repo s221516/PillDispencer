@@ -20,12 +20,17 @@ namespace Config {
     constexpr int PIEZO_THRESHOLD = 50;
 
     // Servo Configuration
+    constexpr int RESET_ANGLE = 180;
     constexpr int DEFAULT_ANGLE = 70;        // Updated dispense angle
     constexpr int DEFAULT_START_ANGLE = 0;  // Updated start angle
     constexpr int SERVO_DELAY_MS = 500;
 
+    //Piezo configuration
+    constexpr int PIEZO_MEASUREMENTS = 10;
+    constexpr int TASK_TIMEOUT_MS = 1000;
+
     // Task Configuration
-    constexpr int TASK_STACK_SIZE = 4096;
+    constexpr int TASK_STACK_SIZE = 8192;  // Increased for stability
     constexpr int TASK_DELAY_MS = 10;
 
     // Network Configuration

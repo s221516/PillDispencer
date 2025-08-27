@@ -1,130 +1,119 @@
 // src/PiezoController.cpp
 #include "PiezoController.h"
 
-PiezoController::PiezoController() 
-    : piezoTriggered(false), 
-    dropDetected(false),
-    lastDropTime(0),
-    logCallback(nullptr),
-    isMonitoring(false),
-    piezoTaskHandle(nullptr) {
+PiezoSensor::PiezoSensor()
+    : isPillDrop(false),
+      logCallback(nullptr),
+      piezoMeasurements(Config::PIEZO_MEASUREMENTS),
+      piezoTaskHandle(NULL),
+      timeoutActive(false),
+      timeoutStart(0)
+{
+    // Initialize array
     for (int i = 0; i < Config::NUM_PIEZOS; i++) {
-        inWave[i] = false;
         values[i] = "";
     }
-    
-    // Create semaphore for drop detection signaling
-    dropSemaphore = xSemaphoreCreateBinary();
+
+    readySemaphore = xSemaphoreCreateBinary();
+    finishedSemaphore = xSemaphoreCreateBinary();
 }
 
-void PiezoController::initialize() {
+void PiezoSensor::initialize() {
     pinMode(Config::LED_PIN, OUTPUT);
     for (int i = 0; i < Config::NUM_PIEZOS; i++) {
         pinMode(Config::PIEZO_PINS[i], INPUT);
     }
 }
 
-void PiezoController::startTask() {
+void PiezoSensor::startTask() {
     xTaskCreate(piezoTaskWrapper, "Piezo Read", Config::TASK_STACK_SIZE, this, 1, &piezoTaskHandle);
 }
 
-void PiezoController::piezoTaskWrapper(void* parameter) {
-    PiezoController* controller = static_cast<PiezoController*>(parameter);
+void PiezoSensor::startTimeout() {
+    timeoutActive = true;
+    timeoutStart = xTaskGetTickCount();
+}
+
+void PiezoSensor::piezoTaskWrapper(void* parameter) {
+    PiezoSensor* controller = static_cast<PiezoSensor*>(parameter);
     controller->piezoTask();
 }
 
-void PiezoController::piezoTask() {
-    piezoTriggered = false;
-    
+void PiezoSensor::piezoTask() {
+    isPillDrop = false;
+
+    xSemaphoreGive(readySemaphore);
     while (true) {
-        // Only process when monitoring is active
-        if (isMonitoring) {
-            for (int i = 0; i < Config::NUM_PIEZOS; i++) {
-                int val = analogRead(Config::PIEZO_PINS[i]);
+        for (int i = 0; i < Config::NUM_PIEZOS; i++) {
+            int val = analogRead(Config::PIEZO_PINS[i]);
 
-                if (val > Config::PIEZO_THRESHOLD) {
-                    piezoTriggered = true;
-                    digitalWrite(Config::LED_PIN, HIGH);
-
-                    if (!inWave[i]) {
-                        inWave[i] = true;
-                        values[i] = "";  // start new wave
-                    }
-                    values[i] += String(val) + ", ";
-
-                } else {
-                    if (inWave[i]) {
-                        // Wave ended → log it once and signal drop
-                        inWave[i] = false;
-                        dropDetected = true;
-                        lastDropTime = millis();
-
-                        // Build message
-                        String msg = String("[PIEZO] ") + Config::PIEZO_NAMES[i] + " -> (";
-                        if (values[i].endsWith(", ")) {
-                            values[i].remove(values[i].length() - 2); // trim last comma
-                        }
-                        msg += values[i] + ")";
-                        
-                        if (logCallback) {
-                            logCallback(msg);
-                        }
-                        
-                        // Signal that a drop was detected
-                        xSemaphoreGive(dropSemaphore);
-                        piezoTriggered = false;
-                    }
-                }
+            if (val > Config::PIEZO_THRESHOLD) {
+                isPillDrop = true;
+                digitalWrite(Config::LED_PIN, HIGH);
+                startRecording(i, val); 
+                
+                // Reset timeout after successful detection
+                timeoutActive = false;
+                xSemaphoreGive(finishedSemaphore);  // Signal completion BEFORE delete
+                piezoTaskHandle = NULL;
+                vTaskDelete(NULL); // finished work, exit
             }
+        }
 
-            if (!piezoTriggered) {
-                digitalWrite(Config::LED_PIN, LOW);
-            }
-            
-            // Fast monitoring when active
-            vTaskDelay(5 / portTICK_PERIOD_MS);
-        } else {
-            // Sleep longer when not monitoring
-            vTaskDelay(50 / portTICK_PERIOD_MS);
+        // Check timeout only if timeout is active
+        if (timeoutActive && (xTaskGetTickCount() - timeoutStart > pdMS_TO_TICKS(Config::TASK_TIMEOUT_MS))) {
+            // Timeout occurred - reset and signal
+            timeoutActive = false;
+            digitalWrite(Config::LED_PIN, LOW);  // Turn off LED
+            xSemaphoreGive(finishedSemaphore);
+            piezoTaskHandle = NULL;
+            vTaskDelete(NULL); // finished work, exit
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(5)); // yield, avoid busy loop
+    }
+}
+
+void PiezoSensor::startRecording(int channel, int firstVal) {
+    TickType_t startTime = xTaskGetTickCount(); // Record start time
+    
+    // Record the first value for the triggering channel
+    values[channel] = String(firstVal);
+    
+    // Record initial values for all other channels
+    for (int i = 0; i < Config::NUM_PIEZOS; i++) {
+        if (i != channel) {
+            int val = analogRead(Config::PIEZO_PINS[i]);
+            values[i] = String(val);
         }
     }
-}
-
-void PiezoController::startMonitoring() {
-    isMonitoring = true;
-    // Clear any pending semaphore signals
-    xSemaphoreTake(dropSemaphore, 0);
-    dropDetected = false;
     
-    if (logCallback) {
-        logCallback("[PIEZO] Monitoring started");
+    // Record subsequent measurements from all channels as fast as possible
+    for (int j = 0; j < piezoMeasurements; j++) {
+        for (int i = 0; i < Config::NUM_PIEZOS; i++) {
+            int val = analogRead(Config::PIEZO_PINS[i]);
+            values[i] += ", " + String(val);
+        }
     }
-}
-
-void PiezoController::stopMonitoring() {
-    isMonitoring = false;
     
-    if (logCallback) {
-        logCallback("[PIEZO] Monitoring stopped");
-    }
-}
-
-bool PiezoController::waitForDropSignal(unsigned long timeoutMs) {
-    // Wait for semaphore signal from piezo task
-    if (xSemaphoreTake(dropSemaphore, pdMS_TO_TICKS(timeoutMs)) == pdTRUE) {
+    
+    // Log all channels
+    for (int i = 0; i < Config::NUM_PIEZOS; i++) {
+        String msg = String("[PIEZO] ") + Config::PIEZO_NAMES[i] + " -> (";
+        msg += values[i] + ")";
+                
         if (logCallback) {
-            logCallback("[PIEZO] Drop signal received");
+            logCallback(msg);
         }
-        return true;
     }
-    
-    if (logCallback) {
-        logCallback("[PIEZO] Timeout - no drop signal");
-    }
-    return false;
-}
 
-void PiezoController::resetDropDetection() {
-    dropDetected = false;
-    lastDropTime = 0;
+    // Calculate elapsed time and ensure total time is at least 1000ms
+    TickType_t elapsedTime = xTaskGetTickCount() - startTime;
+    TickType_t targetTime = pdMS_TO_TICKS(Config::TASK_TIMEOUT_MS*0.8);
+    
+    if (elapsedTime < targetTime) {
+        vTaskDelay(targetTime - elapsedTime); // Sleep for remaining time
+    }
+
+
 }

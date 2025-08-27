@@ -63,7 +63,24 @@ void Displayer::setWebSocketEventHandler() {
 
 void Displayer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length) {
     if (type == WStype_TEXT) {
-        String incoming = String((char*)payload);
+        // Properly handle payload with known length
+        String incoming = "";
+        if (length > 0 && payload != nullptr) {
+            // Create a null-terminated string from payload
+            char* buffer = (char*)malloc(length + 1);
+            memcpy(buffer, payload, length);
+            buffer[length] = '\0';
+            incoming = String(buffer);
+            free(buffer);
+        }
+        
+        // Skip empty commands
+        incoming.trim();
+        if (incoming.length() == 0) {
+            Serial.println("[WS] Ignoring empty command");
+            return;
+        }
+        
         Serial.println("[WS] Received: " + incoming);
         
         // Immediately acknowledge receipt to sender
